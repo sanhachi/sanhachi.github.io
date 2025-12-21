@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!--ESP-CycleMapHUD Release 1.1  by Sanhachi&GPT-4o
+	Compatible: XIAO ESP32-C3,SSD1306 OLED 
+[Warning]This is my old site. Main site->sanhachi.github.io -->
+<head>
+  <meta charset="UTF-8">
+  <title>[Old Version]CycleMapHUD v1.1</title>
+  <link rel="icon" href="map_images/right_turn.png">
+  <style>
+    #map { height: 80vh; width: 100%; }
+    #arrow {
+      position: absolute; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      width: 64px; height: 64px; z-index: 10;
+    }
+    #distance {
+      position: absolute; bottom: 20px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 18px; font-weight: bold;
+      background-color: rgba(255,255,255,0.85);
+      padding: 4px 8px; border-radius: 6px; z-index: 10;
+    }
+    body { margin: 0; padding: 0; }
+  </style>
+  <!-- Google Maps -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBroPx8xIvenoe8cXRpR6AYhVlcWz4faCM&libraries=geometry&loading=async"></script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+</head>
+<body>
+<h1>[旧バージョンです Old version]New site-><a href="https://sanhachi.github.io">Sanhachi.github.io</a></h1>
+  <div id="map"></div>
+  <img id="arrow" src="map_images/straight.png" alt="Turn Arrow">
+  <div id="distance">距離: -- m</div>
+
+<script>
+let map, directionsService, directionsRenderer;
+let startMarker, endMarker, currentPosMarker;
+let routeSteps = [];
+let currentStepIndex = 0;
+
+const arrowImg   = document.getElementById("arrow");
+const distanceDiv= document.getElementById("distance");
+
+let lastDistance = null;
+let isApproaching = true;
+
+// ===== Firebase 初期化 =====
+const firebaseConfig = {
+  databaseURL: "https://maphud-d529f-default-rtdb.firebaseio.com/"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const navRef = db.ref("nav");
+
+// Firebase へ送信
+function sendToFirebase(payload){
+  navRef.set(payload).catch(err => console.error("Firebase送信失敗", err));
+}
+
+// ===== マップ初期化 =====
+function initMap() {
+  map = new google.maps.Map(document.getElementById("map"), {
+    zoom: 16,
+    center: {lat: 35.681236, lng: 139.767125},
+    mapTypeId: 'roadmap'
+  });
+
+  directionsService = new google.maps.DirectionsService();
+  directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: true });
+  directionsRenderer.setMap(map);
+
+  // 初期位置を現在地に
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const curPos = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+      map.setCenter(curPos);
+      if (!startMarker) {
+        startMarker = new google.maps.Marker({position: curPos, map: map, title: "出発地"});
+      }
+    }, err => console.error("初期位置エラー:", err), { enableHighAccuracy: true });
+  }
+
+  // クリックで出発→目的地を設定
+  let clickCount = 0;
+  let tempStart = null;
+  map.addListener('click', (e) => {
+    if (clickCount === 0) {
+      tempStart = e.latLng;
+      if (startMarker) startMarker.setMap(null);
+      startMarker = new google.maps.Marker({position: tempStart, map: map, title: "出発地"});
+      clickCount++;
+    } else {
+      const dest = e.latLng;
+      if (endMarker) endMarker.setMap(null);
+      endMarker = new google.maps.Marker({position: dest, map: map, title: "目的地"});
+      clickCount = 0;
+      calculateRoute(tempStart, dest);
+    }
+  });
+
+  // 現在地トラッキング
+  if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(pos => {
+      const curPos = new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+      if (!currentPosMarker) {
+        currentPosMarker = new google.maps.Marker({
+          position: curPos, map: map, title: "現在地",
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#00f", fillOpacity: 0.9, strokeColor: "#fff", strokeWeight: 2 }
+        });
+      } else {
+        currentPosMarker.setPosition(curPos);
+      }
+
+      if (routeSteps.length > 0) updateArrowAndDistance(curPos);
+    }, err => console.error("位置情報エラー:", err),
+       { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+  }
+}
+
+function calculateRoute(start, end) {
+  directionsService.route({
+    origin: start, destination: end, travelMode: 'BICYCLING'
+  }, (response, status) => {
+    if (status === 'OK') {
+      directionsRenderer.setDirections(response);
+      extractSteps(response);
+      lastDistance = null; isApproaching = true; currentStepIndex = 0;
+    } else {
+      alert("ルート取得失敗: " + status);
+    }
+  });
+}
+
+// 曲がる指示だけ抽出
+function extractSteps(directionResult) {
+  routeSteps = [];
+  const legs = directionResult.routes[0].legs;
+  legs.forEach(leg => {
+    leg.steps.forEach(step => {
+      const instr = step.instructions.replace(/<[^>]+>/g, "");
+      if (/右|Left|左|Right/i.test(instr)) {
+        routeSteps.push({
+          instruction: instr,
+          distance: step.distance.value,
+          latLng: step.end_location,
+          turn: (/右|Right/i.test(instr)) ? "right" : "left"
+        });
+      }
+    });
+  });
+}
+
+// 方向＆距離更新 + Firebase送信
+function updateArrowAndDistance(curPos) {
+  if (!routeSteps.length) return;
+  const step = routeSteps[currentStepIndex];
+
+  // 矢印画像
+  if (step.turn === "right") arrowImg.src = "map_images/right_turn.png";
+  else if (step.turn === "left") arrowImg.src = "map_images/left_turn.png";
+  else arrowImg.src = "map_images/straight.png";
+
+  // 距離
+  const dist = google.maps.geometry.spherical.computeDistanceBetween(curPos, step.latLng);
+  const m = Math.max(0, Math.round(dist));
+  distanceDiv.innerText = "距離: " + m + " m";
+
+  // Firebaseへ送信
+  sendToFirebase({ arrow: step.turn, distance: m });
+
+  // 最後の曲がり
+  if (currentStepIndex === routeSteps.length - 1) {
+    if (m < 15) {
+      distanceDiv.innerText = "到着!";
+      arrowImg.src = "map_images/goal.png";
+      sendToFirebase({ arrow: "straight", distance: 0 });
+    }
+    return;
+  }
+
+  // 通過判定
+  if (lastDistance === null) { lastDistance = m; return; }
+  if (m < lastDistance) {
+    isApproaching = true;
+  } else {
+    if (isApproaching && lastDistance < 20) {
+      currentStepIndex++;
+      lastDistance = null;
+      isApproaching = false;
+      return;
+    }
+  }
+  lastDistance = m;
+}
+
+window.onload = initMap;
+
+// スマホ向き補正（任意）
+if (window.DeviceOrientationEvent) {
+  window.addEventListener("deviceorientation", (event) => {
+    const deviceRotation = event.alpha || 0;
+    arrowImg.style.transform = `translateX(-50%) rotate(${-deviceRotation}deg)`;
+  }, true);
+}
+</script>
+</body>
+</html>
