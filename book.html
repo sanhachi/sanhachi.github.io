@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>本ソムリエ DEMO</title>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+
+<style>
+body {
+    margin: 0;
+    background: #fffaf0;
+    color: #fff;
+}
+
+/* LCD */
+#lcd {
+    width: 520px;
+    margin: 40px auto 10px;
+    padding: 20px;
+    background: #0000cd;
+    border: 2px solid #444;
+    box-shadow: 0 0 20px rgba(255,255,255,0.1);
+    font-family: 'DotGothic16', monospace;
+}
+
+.line {
+    height: 26px;
+    white-space: pre;
+}
+
+.q { font-size: 22px; }
+
+#buttons {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-top: 20px;
+}
+
+.btn {
+    width: 120px;
+    height: 60px;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: inset 0 0 10px #000;
+    border: 2px solid #666;
+    font-family: 'DotGothic16', monospace;
+}
+
+#yesBtn { background:#cc0000; }
+#noBtn  { background:#0033cc; }
+
+.disabled {
+    filter: brightness(0.3);
+    pointer-events: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="lcd">
+    <div class="line q" id="l0"></div>
+    <div class="line" id="l1"></div>
+    <div class="line" id="l2"></div>
+    <div class="line" id="l3"></div>
+</div>
+
+<div id="buttons">
+    <button class="btn" id="yesBtn" onclick="send('y')">YES</button>
+    <button class="btn" id="noBtn" onclick="send('n')">NO</button>
+</div>
+
+<script>
+let pyodide;
+let resolver = null;
+let started = false;
+let phase = "idle";
+
+const lines = [
+    document.getElementById("l0"),
+    document.getElementById("l1"),
+    document.getElementById("l2"),
+    document.getElementById("l3")
+];
+
+const yesBtn = document.getElementById("yesBtn");
+const noBtn  = document.getElementById("noBtn");
+
+function lcd(t){
+    let a = t.split("\n");
+    for(let i=0;i<4;i++){
+        lines[i].textContent = (a[i] || "").padEnd(20," ");
+    }
+}
+
+function setButtons(enable){
+    yesBtn.classList.toggle("disabled", !enable);
+    noBtn.classList.toggle("disabled", !enable);
+}
+
+function send(v){
+
+    if(!started){
+        started = true;
+        start();
+        return;
+    }
+
+    if(phase !== "question") return;
+
+    if(resolver){
+        resolver(v);
+        resolver = null;
+    }
+}
+
+function sleep(ms){
+    return new Promise(r => setTimeout(r, ms));
+}
+
+/* ★修正ポイント：inputじゃなく単なる表示関数 */
+async function show(text, ms=600){
+    lcd(text);
+    await sleep(ms);
+}
+
+async function js_input(text){
+    phase = "question";
+    setButtons(true);
+    lcd(text);
+    return new Promise(r => resolver = r);
+}
+
+async function init(){
+    pyodide = await loadPyodide();
+    pyodide.globals.set("js_input", js_input);
+    pyodide.globals.set("sleep", sleep);
+    pyodide.globals.set("show", show);
+
+    lcd("PRESS START\nY / N");
+    setButtons(true);
+}
+init();
+
+async function start(){
+
+    phase = "calc";
+    setButtons(false);
+
+    const code = `
+from js import js_input, sleep, show
+import math
+
+books = [
+    {"title": "夜のピクニック", "lcd": "ﾖﾙﾉ ﾋﾟｸﾆｯｸ", "author": "ｵﾝﾀﾞ ﾘｸ", "msg": "ﾐﾝﾅﾃﾞ ｱﾙｸ ﾄｸﾍﾞﾂﾅ ｲﾁﾆﾁ", "vector": [0.8, 0.2, 0.0, 0.9]},
+    {"title": "変な家", "lcd": "ﾍﾝﾅ ｲｴ", "author": "ｳｹﾂ", "msg": "ｺﾜｲｹﾄﾞ ﾄﾏﾗﾅｲ! ﾌｼｷﾞﾅ ﾏﾄﾞﾘｽﾞ", "vector": [0.2, 0.9, 0.1, 0.5]},
+    {"title": "君の膵臓をたべたい", "lcd": "ｷﾐﾉ ｽｲｿﾞｳ ｦ ﾀﾍﾞﾀｲ", "author": "ｽﾐﾉ ﾖﾙ", "msg": "ｻｲｺﾞ ﾜ ﾅﾐﾀﾞ ｶﾞ ﾄﾏﾗﾅｲ!", "vector": [1.0, 0.3, 0.0, 0.7]},
+    {"title": "5分後に意外な結末", "lcd": "5ﾌﾝｺﾞﾆ ｲｶﾞｲﾅ ｹﾂﾏﾂ", "author": "ﾓﾓﾄ ﾊﾙ", "msg": "ｱｯ! ｯﾃ ｵﾄﾞﾛｸ ﾐｼﾞｶｲ ｵﾊﾅｼ", "vector": [0.3, 0.5, 0.3, 0.1]},
+    {"title": "かがみの孤城", "lcd": "ｶｶﾞﾐﾉ ｺｼﾞｮｳ", "author": "ﾂｼﾞﾑﾗ ﾐﾂﾞｷ", "msg": "ｶﾞｯｺｳ ｶﾞ ﾆｶﾞﾃﾅ ｷﾐ ﾆ ｵｸﾙ", "vector": [0.9, 0.7, 0.6, 0.9]},
+    {"title": "一瞬の風になれ", "lcd": "ｲｯｼｭﾝ ﾉ ｶｾﾞ ﾆ ﾅﾚ", "author": "ｻﾄｳ ﾀｶｺ", "msg": "ﾘｸｼﾞｮｳ ﾌﾞ ﾉ ｱﾂｲ ｾｲｼｭﾝ!", "vector": [0.7, 0.6, 0.0, 1.0]},
+    {"title": "銭天堂", "lcd": "ｾﾞﾆﾃﾝﾄﾞｳ", "author": "ﾋﾛｼﾏ ﾚｲｺ", "msg": "ﾌｼｷﾞﾅ ﾀﾞｶﾞｼ ﾔ ｻﾝ ﾍ ﾖｳｺｿ", "vector": [0.4, 0.6, 0.9, 0.4]},
+    {"title": "こころ", "lcd": "ｺｺﾛ", "author": "ﾅﾂﾒ ｿｳｾｷ", "msg": "ﾆﾝｹﾞﾝ ﾉ ｺｺﾛ ﾉ ｵｸ ｦ ﾉｿﾞｸ", "vector": [0.9, 0.2, 0.0, 1.0]},
+    {"title": "銀河鉄道の夜", "lcd": "ｷﾞﾝｶﾞﾃﾂﾄﾞｳ ﾉ ﾖﾙ", "author": "ﾐﾔｻﾞﾜ ｹﾝｼﾞ", "msg": "ﾌｼｷﾞ ﾃﾞ ｽｺｼ ｶﾅｼｲ ﾀﾋﾞ", "vector": [0.9, 0.4, 0.9, 0.8]},
+    {"title": "容疑者Xの献身", "lcd": "ﾖｳｷﾞｼｬ X ﾉ ｹﾝｼﾝ", "author": "ﾋｶﾞｼﾉ ｹｲｺﾞ", "msg": "ﾃﾝｻｲ ｶﾞ ｼｶｹﾀ ｶﾅｼｲ ﾄﾘｯｸ", "vector": [0.9, 0.7, 0.0, 0.9]},
+    {"title": "十角館の殺人", "lcd": "ｼﾞｭｯｶｸｶﾝ ﾉ ｻﾂｼﾞﾝ", "author": "ｱﾔﾂｼﾞ ﾕｷﾄ", "msg": "ｻｲｺﾞ ﾉ 1ｷﾞｮｳ ﾆ ﾌﾙｴﾙ!", "vector": [0.2, 1.0, 0.0, 0.9]},
+    {"title": "アルジャーノンに花束を", "lcd": "ｱﾙｼﾞｬｰﾉﾝ ﾆ ﾊﾅﾀﾊﾞ ｦ", "author": "ﾀﾞﾆｴﾙ ｷｲｽ", "msg": "ｺｺﾛ ｶﾞ ﾕｻﾌﾞﾗﾚﾙ ﾒｲｻｸ", "vector": [1.0, 0.4, 0.3, 1.0]},
+    {"title": "君たちはどう生きるか", "lcd": "ｷﾐﾀﾁ ﾜ ﾄﾞｳ ｲｷﾙｶ", "author": "ﾖｼﾉ ｹﾞﾝｻﾞﾌﾞﾛｳ", "msg": "ﾄﾞｳ ｲｷﾙｶ ｶﾝｶﾞｴｻｾﾗﾚﾙ", "vector": [0.7, 0.2, 0.0, 1.0]},
+    {"title": "SLAM DUNK", "lcd": "ｽﾗﾑﾀﾞﾝｸ", "author": "ｲﾉｳｴ ﾀｹﾋｺ", "msg": "ﾊﾞｽｹ ﾆ ｶｹﾀ ｱﾂｲ ﾅﾂ!", "vector": [0.6, 0.8, 0.0, 0.8]},
+    {"title": "アキハバラ＠DEEP", "lcd": "ｱｷﾊﾊﾞﾗ @ DEEP", "author": "ｲｼﾀﾞ ｲﾗ", "msg": "ﾅｶﾏ ﾄﾞｳｼ ﾉ ｱﾂｲ ﾊﾅｼ!", "vector": [0.4, 0.6, 0.3, 0.7]},
+    {"title": "コンビニ人間", "lcd": "ｺﾝﾋﾞﾆ ﾆﾝｹﾞﾝ", "author": "ﾑﾗﾀ ｻﾔｶ", "msg": "ﾌﾂｳ ｯﾃ ﾅﾆ? ﾌｼｷﾞﾅ ﾖﾐｺﾞｺﾁ", "vector": [0.5, 0.5, 0.0, 0.7]},
+    {"title": "星のカービィ", "lcd": "ﾎｼ ﾉ ｶｰﾋﾞｨ", "author": "ﾀｶｾ ﾐｴ", "msg": "ﾌﾟﾌﾟﾌﾟﾗﾝﾄﾞ ﾉ ﾀﾉｼｲ ﾀﾋﾞ", "vector": [0.2, 0.4, 0.8, 0.3]},
+    {"title": "変な絵", "lcd": "ﾍﾝﾅ ｴ", "author": "ｳｹﾂ", "msg": "ｴ ﾉ ﾅｶ ﾆ ｶｸｻﾚﾀ ｷｮｳｷ", "vector": [0.3, 0.9, 0.1, 0.6]},
+    {"title": "余命10年", "lcd": "ﾖﾒｲ 10ﾈﾝ", "author": "ｺｻｶ ﾙｶ", "msg": "ｲﾏ ｦ ﾀｲｾﾂ ﾆ ｲｷﾀｸ ﾅﾙ", "vector": [1.0, 0.2, 0.0, 0.8]},
+    {"title": "博士の愛した数式", "lcd": "ﾊｶｾ ﾉ ｱｲｼﾀ ｽｳｼｷ", "author": "ｵｶﾞﾜ ﾖｳｺ", "msg": "ｽｳｼﾞ ｶﾞ ﾂﾅｸﾞ ﾔｻｼｲ ｷｽﾞﾅ", "vector": [0.8, 0.1, 0.0, 0.8]},
+    {"title": "告白", "lcd": "ｺｸﾊｸ", "author": "ﾐﾅﾄ ｶﾅｴ", "msg": "ﾌｸｼｭｳ ｶﾞ ﾊｼﾞﾏﾙ... ｿﾞｸｯ ﾄ ｽﾙ", "vector": [0.6, 1.0, 0.0, 0.8]},
+    {"title": "舟を編む", "lcd": "ﾌﾈ ｦ ｱﾑ", "author": "ﾐｳﾗ ｼｵﾝ", "msg": "ｼﾞｼﾞｮ ｦ ﾂｸﾙ ｱﾂｲ ﾋﾄﾀﾁ!", "vector": [0.7, 0.2, 0.0, 0.9]},
+    {"title": "ぼくは明日、昨日のきみとデートする", "lcd": "ﾎﾞｸ ﾜ ｱｽ ｷﾉｳ ﾉ ｷﾐﾄ...", "author": "ﾅﾅﾂｷ ﾀｶﾌﾐ", "msg": "ｾﾂﾅｲ ｺｲ ﾉ ﾋﾐﾂ ﾆ ﾋﾞｯｸﾘ!", "vector": [0.9, 0.3, 0.6, 0.7]},
+    {"title": "カラフル", "lcd": "ｶﾗﾌﾙ", "author": "ﾓﾘ ｴﾄ", "msg": "ｼﾝﾀﾞ ﾊｽﾞ ﾉ ﾎﾞｸ ｶﾞ ｻｲｾｲ?", "vector": [0.9, 0.4, 0.4, 0.8]},
+    {"title": "西の魔女が死んだ", "lcd": "ﾆｼ ﾉ ﾏｼﾞｮ ｶﾞ ｼﾝﾀﾞ", "author": "ﾅｼｷ ｶﾎ", "msg": "ｵﾊﾞｱﾁｬﾝ ﾄ ｽｺﾞｽ ﾀｲｾﾂﾅ ﾄｷ", "vector": [0.8, 0.2, 0.2, 0.7]},
+    {"title": "ツナグ", "lcd": "ﾂﾅｸﾞ", "author": "ﾂｼﾞﾑﾗ ﾐﾂﾞｷ", "msg": "ｼﾝﾀﾞ ﾋﾄ ﾆ 1ﾄﾞ ﾀﾞｹ ｱｴﾙ...", "vector": [0.9, 0.4, 0.6, 0.8]},
+    {"title": "夏の庭", "lcd": "ﾅﾂ ﾉ ﾆﾜ", "author": "ﾕﾓﾄ ｶｽﾞﾐ", "msg": "ｵｼﾞｲｻﾝ ﾄ ﾎﾞｸﾗ ﾉ ﾌｼｷﾞﾅ ﾅﾂ", "vector": [0.9, 0.3, 0.0, 0.7]},
+    {"title": "魔女の宅急便", "lcd": "ﾏｼﾞｮ ﾉ ﾀｯｷｭｳﾋﾞﾝ", "author": "ｶﾄﾞﾉ ｴｲｺ", "msg": "ｿﾗ ｦ ﾄﾌﾞ ｼｮｳｼﾞｮ ﾉ ｾｲﾁｮｳｷ", "vector": [0.6, 0.3, 0.9, 0.7]}, # 修正
+    {"title": "三体", "lcd": "ｻﾝﾀｲ", "author": "ﾘｳ ﾂｰｼﾝ", "msg": "ｳﾁｭｳ ﾉ ｽｹｰﾙ ﾆ ｵﾄﾞﾛｸ ﾄﾞﾄｳ ﾉ SF", "vector": [0.6, 0.9, 1.0, 1.0]}, # 追記
+    {"title": "54字の物語", "lcd": "54ｼﾞ ﾉ ﾓﾉｶﾞﾀﾘ", "author": "ｳｼﾞﾀ ﾕｳｽｹ", "msg": "ｽｸﾞ ﾖﾒﾙ! ｲﾐ ｶﾞ ﾜｶﾙﾄ ｺﾜｲ?", "vector": [0.4, 0.4, 0.3, 0.0]} # 修正
+]
+questions = [    
+    ("エイガ を ミテ ボロボロ ナイチャウ ホウ だ？", 0, 1.0),
+    ("ゼッキョウ マシン に マッサキ に ならぶ？", 1, 1.0),
+    ("トシデンセツ や マホウ ノ ウワサ が キニナル？", 2, 1.0),
+    ("ヤスミジカン は ヒトリ で シズかに スゴシタイ？", 3, 1.0),
+    ("シラナイ マチ で マイゴ に なったら ワクワク する？", 1, 0.8),
+    ("シュクダイ は ギリギリ まで ヤラナイ タイプ？", 1, 0.9),
+    ("ソラ を トブ ユメ を よく ミル？", 2, 0.9),
+]
+
+def dist(a,b):
+    return math.sqrt(sum((x-y)**2 for x,y in zip(a,b)))
+
+async def run():
+
+    v=[0.5,0.5,0.5,0.5]
+
+    await show("START", 800)
+
+    for q,axis,t in questions:
+        ans = await js_input(q + "\\nY/N")
+
+        if ans=="y":
+            v[axis] += (t-v[axis])*0.4
+        else:
+            v[axis] += ((1-t)-v[axis])*0.4
+
+        # ★問題間演出（ここが今回の修正ポイント）
+        await show(" ", 400)
+        await sleep(300)
+
+    # ★解析演出（input禁止・自動進行）
+    await show("ﾌﾞﾝｾｷﾁｭｳ", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ.", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ..", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ...", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ.", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ..", 400)
+    await sleep(400)
+    await show("ﾌﾞﾝｾｷﾁｭｳ...", 400)
+    best = min(books, key=lambda b: dist(v,b["vector"]))
+
+    await show(
+        "タイトル:"+best["title"]+
+        "\\n著者:"+best["author"]+
+        "\\n一言:"+best["msg"],
+        2000
+    )
+
+await run()
+`;
+
+    try {
+        await pyodide.runPythonAsync(code);
+    } catch(e){
+        lcd("ERROR\n"+String(e));
+    }
+
+    phase = "idle";
+    setButtons(true);
+}
+</script>
+
+</body>
+</html>
