@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>DIMENSION OVERLOAD // RHYTHM DRIVE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; background: #fff; font-family: 'Share Tech Mono', monospace; cursor: pointer; transition: background 0.4s ease; user-select: none; touch-action: none; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; text-align: center; transition: color 0.4s ease; color: #000; }
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 100; transition: color 0.4s ease; display: none; color: #000; }
+        .force-white { color: #fff !important; }
+
+        /* タイトルエリアの再設計 */
+        .logo-container { position: relative; margin-bottom: 10px; }
+        .logo { 
+            font-size: 64px; /* 元の迫力あるサイズに復帰 */
+            font-weight: bold; 
+            letter-spacing: 4px; /* 文字数が多いので間隔をわずかに詰め、収まりを良く */
+            position: relative; 
+            display: inline-block;
+            line-height: 1.1;
+        }
+        
+        /* グリッチエフェクト：新タイトルに合わせて最適化 */
+        .logo::before, .logo::after { 
+            content: 'DIMENSION OVERLOAD'; 
+            position: absolute; 
+            top: 0; left: 0; width: 100%; height: 100%; 
+            display: none; 
+        }
+        .glitch-active .logo::before { 
+            display: block; color: #ff0050; left: -4px; z-index: -1; 
+            animation: glitch-anim-1 0.2s infinite linear alternate-reverse; 
+        }
+        .glitch-active .logo::after { 
+            display: block; color: #00f2ea; left: 4px; z-index: -2; 
+            animation: glitch-anim-2 0.2s infinite linear alternate-reverse; 
+        }
+        
+        @keyframes glitch-anim-1 { 0% { clip-path: inset(10% 0 60% 0); transform: translate(-3px, 2px); } 100% { clip-path: inset(50% 0 5% 0); transform: translate(-5px, -2px); } }
+        @keyframes glitch-anim-2 { 0% { clip-path: inset(40% 0 20% 0); transform: translate(4px, -2px); } 100% { clip-path: inset(15% 0 75% 0); transform: translate(2px, 2px); } }
+        
+        .sub-logo { font-size: 16px; letter-spacing: 8px; opacity: 0.8; margin-bottom: 25px; font-weight: bold; }
+        
+        /* モバイル対応：画面が狭いときは自動縮小 */
+        @media (max-width: 600px) {
+            .logo { font-size: 38px; letter-spacing: 2px; }
+            .sub-logo { font-size: 12px; letter-spacing: 4px; }
+        }
+
+        /* --- 以下、ゲームシステムCSS（変更なし） --- */
+        #debug-panel { position: absolute; top: 10px; right: 10px; width: 180px; background: rgba(0, 0, 0, 0.85); color: #0f0; padding: 12px; font-size: 10px; z-index: 1000; border: 1px solid #0f0; display: none; pointer-events: auto; cursor: default; }
+        #debug-panel h4 { margin: 0 0 10px 0; border-bottom: 1px solid #0f0; padding-bottom: 5px; color: #fff; font-size: 11px; }
+        .debug-item { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .debug-item input[type="range"] { width: 70px; cursor: pointer; }
+        .debug-btn { background: #222; color: #0f0; border: 1px solid #0f0; padding: 2px 6px; cursor: pointer; font-size: 9px; font-family: inherit; }
+        .debug-btn.active { background: #0f0; color: #000; font-weight: bold; }
+        #tut-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 400; pointer-events: none; }
+        .tut-msg-box { background: #000; color: #fff; border: 1px solid #fff; padding: 20px 40px; text-align: center; min-width: 350px; }
+        .tut-phase { font-size: 10px; letter-spacing: 4px; color: #ff0; margin-bottom: 8px; }
+        .tut-text { font-size: 18px; letter-spacing: 2px; }
+        .tut-finish-hint { font-size: 11px; color: #888; margin-top: 20px; animation: blink 1.5s infinite; }
+        .high-score-label { font-size: 12px; color: #ff0; margin-bottom: 30px; opacity: 0.9; text-shadow: 0 0 4px rgba(0,0,0,0.5); }
+        .start-msg { font-size: 18px; letter-spacing: 3px; margin-top: 20px; animation: blink 1.5s infinite; }
+        .btn-container { display: flex; gap: 20px; margin-top: 40px; }
+        .eye-care-status, .tut-btn { font-size: 10px; color: #888; border: 1px solid #ccc; padding: 8px 16px; pointer-events: auto; cursor: pointer; transition: all 0.2s ease; }
+        .eye-care-status.active { color: #00d2ff; border-color: #00d2ff; background: rgba(0, 210, 255, 0.1); }
+        .tut-btn:hover { color: #000; border-color: #000; background: #f0f0f0; }
+        #version-info { position: absolute; bottom: 15px; right: 20px; text-align: right; font-size: 10px; color: #888; letter-spacing: 1px; line-height: 1.6; pointer-events: none; z-index: 210; opacity: 0.6; }
+        #result { color: #fff; display: none; pointer-events: none; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .reboot-msg { font-size: 12px; margin-top: 20px; color: #fff; letter-spacing: 5px; animation: blink 0.8s infinite; }
+        canvas { display: block; }
+
+        .song-loader { margin-top: 8px; pointer-events: auto; }
+        #zip-input { display: none; }
+        .zip-btn {
+            display: inline-block; font-size: 10px; letter-spacing: 1px;
+            color: inherit; border: 1px solid currentColor; padding: 9px 18px;
+            cursor: pointer; transition: all 0.2s ease;
+        }
+        .zip-btn:hover { background: rgba(128,128,128,0.15); }
+        #song-info { margin-top: 12px; font-size: 10px; letter-spacing: 1px; opacity: 0.75; min-height: 14px; }
+        #song-error { margin-top: 8px; font-size: 10px; color: #f33; max-width: 520px; line-height: 1.5; }
+        #song-progress { margin-top: 8px; font-size: 9px; color: #888; min-height: 12px; }
+    </style>
+</head>
+<body>
+    <div id="debug-panel">
+        <h4>DEBUG PANEL</h4>
+        <div class="debug-item"><span>INVINCIBLE</span><button id="dbg-inv-btn" class="debug-btn">OFF</button></div>
+        <div class="debug-item"><span>HITBOX</span><button id="dbg-box-btn" class="debug-btn">OFF</button></div>
+        <div class="debug-item"><span>SPEED: <span id="dbg-speed-val">AUTO</span></span><input type="range" id="dbg-speed-range" min="0" max="30" value="0"></div>
+        <div class="debug-item"><span>SPAWN: <span id="dbg-spawn-val">1.0</span>x</span><input type="range" id="dbg-spawn-range" min="0" max="50" value="10"></div>
+        <hr style="border-color:#164b16; margin:8px 0">
+        <div class="debug-item"><span>SYNC: <span id="dbg-early-val">170</span> ms</span><input type="range" id="dbg-early-range" min="-300" max="300" step="5" value="170"></div>
+        <div id="dbg-timing-info" style="font-size:9px;line-height:1.5;white-space:pre-wrap;color:#baffba">TIMING: waiting for song</div>
+    </div>
+
+    <div id="tut-overlay">
+        <div class="tut-msg-box">
+            <div id="tut-phase" class="tut-phase">PHASE_01</div>
+            <div id="tut-text" class="tut-text">HOLD TO ASCEND</div>
+            <div id="tut-hint" class="tut-finish-hint">CLICK OR ENTER TO FINISH</div>
+        </div>
+    </div>
+
+    <div id="ui">
+        <div id="status-label" style="font-size: 10px; letter-spacing: 2px;">SYSTEM_STATUS: ACTIVE</div>
+        <div style="font-size: 32px;" id="score-display">000</div><div id="distanceScore">DIST: 0&nbsp;&nbsp; DODGED: 0</div>
+    </div>
+
+    <div id="title-screen" class="overlay">
+        <div class="logo-container">
+            <div class="logo">DIMENSION OVERLOAD</div>
+        </div>
+        <div class="sub-logo">// RHYTHM DRIVE</div>
+        <div class="high-score-label">SYSTEM_BEST: <span id="title-best">000</span></div>
+        <div id="start-msg" class="start-msg">CLICK OR SPACE TO START</div>
+
+        <div class="song-loader">
+            <label for="zip-input" class="zip-btn">SELECT SONG ZIP</label>
+            <input id="zip-input" type="file" accept=".zip,application/zip">
+            <div id="song-info">NO SONG LOADED</div>
+            <div id="song-progress"></div>
+            <div id="song-error"></div>
+        </div>
+        <div class="btn-container">
+            <div id="tut-trigger" class="tut-btn">HOW TO PLAY</div>
+            <div id="eye-care-toggle" class="eye-care-status">EYE-CARE MODE: OFF</div>
+        </div>
+        <div id="version-info">VER. 2.0 ©2026 Sanhachi</div>
+    </div>
+
+    <div id="result" class="overlay force-white">
+        <div id="result-label" style="font-size: 14px; letter-spacing: 4px; opacity: 0.8;">DIMENSION_COLLAPSED</div>
+        <div style="font-size: 80px; font-weight: bold; line-height: 1;" id="final-score">000</div>
+        <div id="best-container" style="font-size: 16px; color: #ff0; margin-top: 5px;">BEST: <span id="best-score">000</span></div>
+        <div id="reboot-msg" class="reboot-msg">CLICK TO REBOOT</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+// DIMENSION OVERLOAD // TJA RHYTHM ENGINE
+// Song format: (song name).zip -> .tja + .ogg
+// The first .tja in the ZIP is used; audio = TJA "WAVE:" file (fallback: first .ogg).
+
+const DEBUG_CONFIG = {
+    enabled: false, invincible: false, customSpeed: null,
+    spawnRate: 1.0, showHitbox: false,
+    launchLead: 0.10
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let score = 0;
+let playerDistance = 0;
+let dodgedNotes = 0;
+let highScore = localStorage.getItem('dimG_highScore') || 0;
+document.getElementById('title-best').innerText = highScore.toString().padStart(3, '0');
+
+let isStarted = false, isGameOver = false, isMelting = false, isPressing = false;
+let heat = 0, zLayer = 0, ghosting = [], canReboot = false, isEyeCare = false, titleTimer = 0;
+let currentBg = { r: 255, g: 255, b: 255 };
+const lerp = (a,b,t) => (1-t)*a+t*b;
+
+let isTutorial = false, tutStep = 0, tutTimer = 0, isTutFailed = false;
+const tutSteps = [
+    { phase:"PHASE_01", text:"AVOID OBSTACLES: HOLD TO ASCEND" },
+    { phase:"PHASE_02", text:"DENSE AREA: SHIFT DIMENSION (Z / RMB)" },
+    { phase:"PHASE_03", text:"WARNING: EDGES CAUSE OVERHEAT" }
+];
+
+let audioCtx = null;
+let songAudio = null;
+let songURL = null;
+let songData = null;
+let songName = "";
+let songPlaying = false;
+let songStartAudioTime = 0;
+let songOffset = 0;
+let nextEventIndex = 0;
+let gameEvents = [];
+let songFinished = false;
+let lastSongTime = 0;
+let isResultFading = false, resultFadeAlpha = 0;
+
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+}
+function playTone(freq,type,dur,vol) {
+    if (!audioCtx) return;
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.type=type; osc.frequency.setValueAtTime(freq,audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol,audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+dur);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime+dur);
+}
+
+function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
+window.addEventListener('resize',resize); resize();
+
+const player={x:150,y:0,size:20,speed:11.5};
+let obstacles=[];
+
+// ---------- TJA parser ----------
+function cleanLine(s){ return s.replace(/^\uFEFF/,"").replace(/\/\/.*$/,"").trim(); }
+
+function parseTJA(text) {
+    const lines = text.replace(/\r/g,"").split("\n");
+    const meta = {};
+    const courses = [];
+    let i=0;
+
+    while(i<lines.length){
+        const raw=cleanLine(lines[i++]);
+        if(!raw || raw.startsWith("//")) continue;
+
+        const startM=raw.match(/^#START(?:\s+(P[12]))?$/i);
+        if(startM){
+            const parsed=parseCourse(lines,i,{...meta});
+            const courseMeta={...meta};
+            // 2P側(#START P2)は読み飛ばすだけ。1P譜面のみ使う。
+            if((startM[1]||"").toUpperCase()!=="P2")
+                courses.push({notes:parsed.notes,duration:parsed.duration,meta:courseMeta});
+            i=parsed.index;
+            continue;
+        }
+
+        const m=raw.match(/^([^:]+):(.*)$/);
+        if(m){
+            const key=m[1].trim().toUpperCase(), val=m[2].trim();
+            meta[key]=val;
+            if(key==="BPM") meta.BPM=parseFloat(val);
+        }
+    }
+
+    if(!courses.length) throw new Error("TJAに #START / #END の譜面がありません。");
+
+    let selected=courses[0];
+    const preferred=["ONI","EDIT","HARD","NORMAL","EASY"];
+    for(const p of preferred){
+        const found=courses.find(c=>(c.meta.COURSE||"").toUpperCase()===p ||
+            ({"3":"ONI","2":"HARD","1":"NORMAL","0":"EASY"}[String(c.meta.COURSE||"")]===p));
+        if(found){ selected=found; break; }
+    }
+
+    return {
+        title: meta.TITLE || "UNTITLED",
+        subtitle: meta.SUBTITLE || "",
+        bpm: parseFloat(meta.BPM) || 120,
+        offset: parseFloat(meta.OFFSET) || 0,
+        wave: meta.WAVE || "",
+        notes: selected.notes,
+        duration: selected.duration || 0,
+        course: selected.meta.COURSE || "UNKNOWN"
+    };
+}
+
+function parseCourse(lines,index,baseMeta){
+    let measureNum=4, measureDen=4, scroll=1;
+    let beat=0, records=[], durationBeat=0, measureBuffer="";
+    // 小節の途中に書かれた #BPMCHANGE / #DELAY は「小節内の文字位置」を覚えておき、
+    // 小節が閉じたとき(=小節の文字数が確定したとき)に正しい拍位置へ変換する。
+    let pending=[];
+    // 譜面分岐: #N/#E/#M のうち最初に現れた1本だけを採用（全部足すと曲より長くなる）
+    let inBranch=false, branchSec=null, branchPick=null;
+
+    const processMeasure=(data)=>{
+        const measureLen=4*(measureNum/measureDen);
+        for(const pc of pending){
+            const frac=data.length?Math.min(1,pc.pos/data.length):0;
+            records.push({type:pc.type,beat:beat+measureLen*frac,value:pc.value});
+        }
+        pending=[];
+        for(let n=0;n<data.length;n++){
+            const ch=data[n];
+            if(ch!=="0") records.push({
+                type:"note",
+                beat:beat+measureLen*(n/data.length),
+                note:parseInt(ch,10),
+                scroll
+            });
+        }
+        beat+=measureLen;
+        durationBeat=Math.max(durationBeat,beat);
+    };
+
+    while(index<lines.length){
+        const raw=cleanLine(lines[index++]);
+        if(!raw || raw.startsWith("//")) continue;
+        const upper=raw.toUpperCase();
+        if(upper==="#END"){
+            if(measureBuffer.length) processMeasure(measureBuffer);
+            else if(pending.length){
+                for(const pc of pending) records.push({type:pc.type,beat,value:pc.value});
+                pending=[];
+            }
+            break;
+        }
+
+        const cmd=raw.match(/^#([A-Z]+)(?:\s+(.+))?$/i);
+        if(cmd){
+            const name=cmd[1].toUpperCase(), arg=(cmd[2]||"").trim();
+            if(name==="BRANCHSTART"){ inBranch=true; branchSec=null; branchPick=null; continue; }
+            if(name==="BRANCHEND"){ inBranch=false; branchSec=null; continue; }
+            if(inBranch && (name==="N"||name==="E"||name==="M")){
+                branchSec=name;
+                if(branchPick===null) branchPick=name;
+                continue;
+            }
+            if(inBranch && branchSec!==branchPick) continue; // 採用しない分岐は無視
+
+            if(name==="BPMCHANGE"){
+                const v=parseFloat(arg);
+                if(Number.isFinite(v)&&v>0) pending.push({type:"bpm",pos:measureBuffer.length,value:v});
+            }else if(name==="MEASURE"){
+                const pr=arg.split("/");
+                if(pr.length===2){
+                    const n=parseFloat(pr[0]),d=parseFloat(pr[1]);
+                    if(Number.isFinite(n)&&Number.isFinite(d)&&d>0){measureNum=n;measureDen=d;}
+                }
+            }else if(name==="SCROLL"){
+                const v=parseFloat(arg);
+                if(Number.isFinite(v)) scroll=v;
+            }else if(name==="DELAY"){
+                const v=parseFloat(arg);
+                if(Number.isFinite(v)) pending.push({type:"delay",pos:measureBuffer.length,value:v});
+            }
+            continue;
+        }
+
+        if(!/^[0-9,]+$/.test(raw)) continue;
+        if(inBranch && branchSec!==branchPick) continue;
+        for(const ch of raw){
+            if(ch===","){
+                processMeasure(measureBuffer);
+                measureBuffer="";
+            }else{
+                measureBuffer+=ch;
+            }
+        }
+    }
+
+    const tempos=records.filter(x=>x.type==="bpm").sort((a,b)=>a.beat-b.beat);
+    const delays=records.filter(x=>x.type==="delay").sort((a,b)=>a.beat-b.beat);
+    const headBpm=parseFloat(baseMeta.BPM)||120;
+
+    function beatToSec(target){
+        let sec=0,fromBeat=0,curBpm=headBpm;
+        for(const t of tempos){
+            if(t.beat>target) break;
+            sec+=(t.beat-fromBeat)*60/curBpm;
+            fromBeat=t.beat;
+            curBpm=t.value;
+        }
+        sec+=(target-fromBeat)*60/curBpm;
+        for(const d of delays) if(d.beat<=target) sec+=d.value;
+        return sec;
+    }
+
+    const notes=records.filter(x=>x.type==="note").map(x=>({
+        time:beatToSec(x.beat), beat:x.beat, note:x.note, scroll:x.scroll
+    })).sort((a,b)=>a.time-b.time);
+
+    return {notes,index,duration:beatToSec(durationBeat)};
+}
+
+// ---------- ZIP loading ----------
+document.getElementById("zip-input").addEventListener("change", async (e)=>{
+    const file=e.target.files[0];
+    if(file) await loadSongZip(file);
+});
+
+async function loadSongZip(file){
+    const info=document.getElementById("song-info");
+    const progress=document.getElementById("song-progress");
+    const error=document.getElementById("song-error");
+    error.textContent="";
+    progress.textContent="READING ZIP...";
+
+    try{
+        if(!window.JSZip) throw new Error("ZIPライブラリを読み込めませんでした。インターネット接続を確認してください。");
+        const zip=await JSZip.loadAsync(file);
+        const entries=Object.values(zip.files).filter(x=>!x.dir);
+
+        const tja=entries.find(x=>/\.tja$/i.test(x.name));
+        if(!tja) throw new Error("ZIP内に .tja がありません。");
+
+        progress.textContent="PARSING TJA...";
+        const bytes=await tja.async("uint8array");
+        let text;
+        try{
+            text=new TextDecoder("utf-8",{fatal:true}).decode(bytes);
+        }catch{
+            text=new TextDecoder("shift_jis").decode(bytes);
+        }
+
+        const parsedSong=parseTJA(text);
+
+        // TJAの WAVE: で指定された音声を優先。無ければ最初の音声ファイル。
+        const audioEntries=entries.filter(x=>/\.(ogg|mp3|wav|m4a|flac)$/i.test(x.name));
+        const waveName=(parsedSong.wave||"").trim().toLowerCase();
+        const base=n=>n.split("/").pop().toLowerCase();
+        const audioEntry=(waveName&&audioEntries.find(x=>base(x.name)===waveName))
+            || audioEntries.find(x=>/\.ogg$/i.test(x.name))
+            || audioEntries[0];
+        if(!audioEntry) throw new Error("ZIP内に音声ファイル(.ogg など)がありません。");
+
+        progress.textContent="DECODING AUDIO...";
+        stopSong();
+        clock.active=false;
+        songData=parsedSong;
+        gameEvents=buildGameEvents(songData.notes, songData.bpm);
+        songName=file.name.replace(/\.zip$/i,"");
+
+        initAudio();
+        const arrBuf=await audioEntry.async("arraybuffer");
+        songBuffer=null; songDuration=0;
+        if(songURL){ URL.revokeObjectURL(songURL); songURL=null; }
+        if(songAudio){ songAudio.pause(); songAudio.src=""; songAudio=null; }
+        try{
+            // WebAudioでデコード → サンプル精度の時計で再生する（メイン経路）
+            songBuffer=await audioCtx.decodeAudioData(arrBuf.slice(0));
+            songDuration=songBuffer.duration;
+        }catch(decErr){
+            console.warn("decodeAudioData failed, fallback to <audio>:",decErr);
+            songBuffer=null;
+            const ext=(audioEntry.name.match(/\.(\w+)$/)||[])[1]||"ogg";
+            const mime={ogg:"audio/ogg",mp3:"audio/mpeg",wav:"audio/wav",m4a:"audio/mp4",flac:"audio/flac"}[ext.toLowerCase()]||"audio/ogg";
+            songURL=URL.createObjectURL(new Blob([arrBuf],{type:mime}));
+            songAudio=new Audio(songURL);
+            songAudio.preload="auto";
+            songAudio.addEventListener("ended",onSongEnded);
+            songAudio.addEventListener("loadedmetadata",()=>{ songDuration=songAudio.duration||0; });
+            songAudio.addEventListener("error",()=>{ error.textContent="音声をブラウザで再生できませんでした。"; });
+            songAudio.load();
+        }
+
+        info.textContent=`${songName} // ${songData.title} // ${songData.course} // BPM ${songData.bpm}`;
+        progress.textContent=`NOTES: ${songData.notes.length} // ${songBuffer?"AUDIO-CLOCK SYNC (WebAudio)":"AUDIO-CLOCK SYNC (fallback)"} // SYNC ${syncCalibMs>=0?"+":""}${syncCalibMs}ms ( [ ] で調整 )`;
+        document.getElementById("start-msg").textContent="CLICK OR SPACE TO START";
+        isStarted=false;
+        songFinished=false;
+        nextEventIndex=0;
+        obstacles=[];
+    }catch(err){
+        console.error(err);
+        info.textContent="NO SONG LOADED";
+        progress.textContent="";
+        error.textContent=err.message||String(err);
+        songData=null;
+    }
+}
+
+function onSongEnded(){
+    if(songFinished) return;
+    songPlaying=false;
+    songFinished=true;
+    songEndWall=performance.now();
+    nextEventIndex=gameEvents.length;
+    // 画面に残っているノーツが流れ切ってから finishSong() する（update() 内で判定）
+}
+
+// ---------- Master clock (audio-driven) ----------
+// 譜面時間 t(秒) = 音声の再生位置 + OFFSET。ノーツは必ず t == note.time の瞬間に
+// プレイヤーの位置へ到達する。描画フレーム数・FPS・スコアによる速度変化には依存しない。
+const SPEED_CAP=30;            // px/frame(60Hz換算)。終盤の速度が無限に上がらないための上限
+const FIXED_STEP=1000/60;
+const DEFAULT_SYNC_MS=170; // 実測で合った値（環境により [ ] キーで調整可）
+let syncCalibMs=(()=>{ try{ const v=localStorage.getItem("dimG_syncMs2"); return v===null?DEFAULT_SYNC_MS:(Number(v)||0); }catch{ return DEFAULT_SYNC_MS; } })(); // +で譜面が早く発射 / -で遅く
+let songBuffer=null, songSource=null, songToken=0, songDuration=0, songEndWall=0;
+const clock={active:false,origin:0,ctxStart:0,fbWall0:0,fbStarted:false,fbLastAudio:0,fbLastWall:0,last:-10};
+
+function audioHeardTime(){
+    // いま「スピーカーから聞こえている」AudioContext時刻
+    if(audioCtx.getOutputTimestamp){
+        const ts=audioCtx.getOutputTimestamp();
+        if(ts && ts.performanceTime>0 && ts.contextTime>0){
+            const v=ts.contextTime+(performance.now()-ts.performanceTime)/1000;
+            if(Math.abs(v-audioCtx.currentTime)<0.5) return v;
+        }
+    }
+    return audioCtx.currentTime-(audioCtx.outputLatency||audioCtx.baseLatency||0);
+}
+
+function getChartTime(){
+    if(!clock.active) return clock.last+syncCalibMs/1000;
+    let t;
+    if(songBuffer){
+        t=clock.origin+(audioHeardTime()-clock.ctxStart);
+    }else{
+        const nowW=performance.now()/1000, off=songData.offset||0;
+        if(!clock.fbStarted){
+            t=clock.origin+(nowW-clock.fbWall0);
+            if(t>=off && songAudio){            // 音声位置が0に到達 → 再生開始
+                clock.fbStarted=true;
+                songAudio.currentTime=0;
+                songAudio.play().then(()=>{songPlaying=true;}).catch(e=>{
+                    document.getElementById("song-error").textContent="音声の再生を開始できませんでした: "+e.message;
+                });
+                clock.fbLastAudio=0; clock.fbLastWall=nowW;
+            }
+        }else{
+            const ct=songAudio.currentTime;
+            if(ct!==clock.fbLastAudio){clock.fbLastAudio=ct;clock.fbLastWall=nowW;}
+            t=clock.fbLastAudio+Math.min(0.1,nowW-clock.fbLastWall)+off;
+        }
+        t=Math.max(t,clock.last); // 逆行させない
+    }
+    clock.last=t;
+    return t+syncCalibMs/1000;
+}
+
+function stopSong(){
+    songToken++;
+    if(songSource){ try{songSource.stop();}catch{} try{songSource.disconnect();}catch{} songSource=null; }
+    if(songAudio) songAudio.pause();
+    songPlaying=false;
+}
+
+function noteSize(ev){ return ev.note>=5 ? 64 : (ev.note===3||ev.note===4 ? 50 : 36); }
+function currentSpeed(){
+    let s=isTutorial?8.5:(isStarted?Math.min(SPEED_CAP,8.5+score*0.15):5);
+    if(DEBUG_CONFIG.customSpeed!==null) s=DEBUG_CONFIG.customSpeed;
+    return s;
+}
+function hitXFor(size){ return player.x+player.size/2-size/2; }          // ノーツ中心がプレイヤー中心に重なる位置
+function travelSec(size,speed){ return (canvas.width+100-hitXFor(size))/(speed*60); }
+
+function startSongClock(){
+    stopSong();
+    const offset=songData.offset||0;
+    // 発射=音符の時刻なので長い助走は不要。短い準備時間だけ取る
+    const preroll=1.0;
+    const T0=Math.min(-preroll,offset);   // 譜面時間の開始点（音声位置が必ず0以下になるように）
+    const delay=-(T0-offset);             // 音声が鳴り始めるまでの秒数
+    clock.origin=T0; clock.last=T0; clock.fbStarted=false;
+    if(songBuffer){
+        const ctxStart=audioCtx.currentTime+0.15;
+        clock.ctxStart=ctxStart;
+        const src=audioCtx.createBufferSource();
+        src.buffer=songBuffer;
+        src.connect(audioCtx.destination);
+        const token=++songToken;
+        src.onended=()=>{ if(token===songToken) onSongEnded(); };
+        src.start(ctxStart+delay);
+        songSource=src;
+        songPlaying=true;
+    }else{
+        clock.fbWall0=performance.now()/1000+0.15;
+    }
+    clock.active=true;
+}
+
+// ---------- Game ----------
+function spawn(yPercent=null,sizeVal=null,zVal=null,event=null){
+    const size=sizeVal || (Math.random()*55+20);
+    const targetZ=zVal!==null ? zVal : (Math.random()>0.5?1:0);
+    const yPos=yPercent!==null ? canvas.height*yPercent : Math.random()*(canvas.height-size);
+    const speedBase=currentSpeed();
+
+    // TJAのノーツ: 「発射(右端に出現)」が音符の時刻ちょうど。
+    // 位置は毎フレーム音声時計から計算する(update参照):
+    //   x = 発射X - (現在の譜面時間 - hitTime) * 速度
+    // FPSや描画落ちに関係なく、発射タイミングも流れる速さも実時間で正確。
+    const hasClock=event && event.time!=null;
+    obstacles.push({
+        x:canvas.width+100,y:yPos,w:size,h:size,speed:speedBase,
+        z:targetZ,rot:0,note:event?.note||1, hitTime:hasClock?event.time:null,
+        clock:!!hasClock, pxs:speedBase*60, spawnX:canvas.width+100
+    });
+}
+
+function buildGameEvents(notes,bpm){
+    if(!notes || !notes.length) return [];
+    const result=[];
+    let last=-Infinity, laneSeed=0;
+    for(let i=0;i<notes.length;i++){
+        const n=notes[i];
+        if(n.time<0 || n.time-last<0.045) continue;
+        let lane=(laneSeed+(n.note||1)+i)%8;
+        if(result.length && lane===result[result.length-1].lane) lane=(lane+3)%8;
+        result.push({
+            time:n.time,note:n.note||1,lane,
+            dimension:(n.note||1)%2,generated:false
+        });
+        last=n.time;
+        laneSeed=(laneSeed+1)%8;
+    }
+    return result;
+}
+
+function spawnFromNote(ev){
+    const lane=((ev.lane??0)+8)%8;
+    const yTable=[0.08,0.20,0.32,0.44,0.56,0.68,0.80,0.92];
+    const y=Math.max(0.03,Math.min(0.88,yTable[lane]));
+    const size=noteSize(ev);
+    const z=ev.dimension??(ev.note%2===0?1:0);
+    spawn(y,size,z,ev);
+}
+
+function reset(){
+    initAudio();
+    score=0; playerDistance=0; dodgedNotes=0; heat=0; zLayer=0; player.y=canvas.height/2;
+    obstacles=[]; ghosting=[]; isGameOver=false; isMelting=false; canReboot=false; isResultFading=false; resultFadeAlpha=0;
+    tutTimer=0; nextEventIndex=0; lastSongTime=0; songFinished=false; songEndWall=0;
+    document.getElementById("ui").classList.remove("force-white");
+    document.getElementById("result").style.display="none";
+    document.getElementById("title-screen").style.display="none";
+    document.getElementById("ui").style.display=isTutorial?"none":"block";
+    if(isTutorial) document.getElementById("tut-overlay").style.display="flex";
+    document.getElementById("score-display").innerText="000";
+    document.getElementById("status-label").innerText="SYSTEM_STATUS: ACTIVE";
+    updateVisuals();
+}
+
+function startGame(){
+    if(!songData || !(songBuffer||songAudio)){
+        document.getElementById("song-error").textContent="先に .tja と .ogg が入ったZIPを選択してください。";
+        return;
+    }
+    initAudio();
+    isStarted=true; isTutorial=false; reset();
+    startSongClock();
+}
+
+function finishSong(){
+    if(isResultFading || document.getElementById("result").style.display==="flex") return;
+    isStarted=false;
+    songPlaying=false;
+    isPressing=false;
+    canReboot=false;
+    isResultFading=true;
+    resultFadeAlpha=0;
+    document.getElementById("result").style.display="none";
+    document.getElementById("result-label").innerText="DIMENSION_CLEARED";
+    document.getElementById("reboot-msg").innerText="CLICK TO REPLAY";
+}
+
+function triggerGameOver(){
+    if(isGameOver || (DEBUG_CONFIG.enabled&&DEBUG_CONFIG.invincible)) return;
+    isGameOver=true; isMelting=true; canReboot=false; isPressing=false;
+    stopSong();
+    clock.active=false;
+    document.getElementById("ui").classList.add("force-white");
+    document.getElementById("result-label").innerText="DIMENSION_COLLAPSED";
+    document.getElementById("reboot-msg").innerText="CLICK TO REPLAY";
+    document.getElementById("best-container").style.visibility="visible";
+    if(score>highScore){
+        highScore=score;
+        localStorage.setItem("dimG_highScore",highScore);
+        document.getElementById("title-best").innerText=highScore.toString().padStart(3,"0");
+    }
+    playTone(100,"sawtooth",0.5,0.3);
+    playTone(50,"square",0.8,0.4);
+    document.getElementById("status-label").innerText="SYSTEM_STATUS: FAILED";
+}
+
+function updateVisuals(){
+    if(isMelting) return;
+    const isWhiteBg=(zLayer===0&&!isEyeCare);
+    const mainColor=isWhiteBg?"#000":"#fff";
+    document.body.style.background=isEyeCare?"#111":(zLayer===0?"#fff":"#000");
+    const title=document.getElementById("title-screen");
+    if(title){
+        title.style.color=mainColor;
+        const best=title.querySelector(".high-score-label");
+        if(best) best.style.textShadow=isWhiteBg?"0 0 4px rgba(0,0,0,.6)":"0 0 3px rgba(0,0,0,.4)";
+    }
+    if(!document.getElementById("ui").classList.contains("force-white"))
+        document.getElementById("ui").style.color=mainColor;
+}
+
+function triggerGlitchEffect(duration){
+    const title=document.getElementById("title-screen");
+    if(title) title.classList.add("glitch-active");
+    setTimeout(()=>{if(title)title.classList.remove("glitch-active")},duration);
+}
+
+function update(){
+    if(isMelting){
+        heat+=4.5;
+        if(heat>=125){
+            document.getElementById("final-score").innerText=score.toString().padStart(3,"0");
+            document.getElementById("best-score").innerText=highScore.toString().padStart(3,"0");
+            document.getElementById("result").style.display="flex";
+            setTimeout(()=>canReboot=true,100);
+        }
+        return;
+    }
+
+    if(!isStarted){
+        titleTimer++;
+        if(Math.random()<0.005) triggerGlitchEffect(150);
+        if(titleTimer>240){zLayer=zLayer===0?1:0;updateVisuals();triggerGlitchEffect(400);titleTimer=0;}
+    }
+
+    const targetRGB=isEyeCare?{r:17,g:17,b:17}:(zLayer===0?{r:255,g:255,b:255}:{r:17,g:17,b:17});
+    currentBg.r=lerp(currentBg.r,targetRGB.r,.1);
+    currentBg.g=lerp(currentBg.g,targetRGB.g,.1);
+    currentBg.b=lerp(currentBg.b,targetRGB.b,.1);
+
+    if(isStarted){
+        const oldPlayerY=player.y;
+        if(isPressing) player.y-=player.speed; else player.y+=player.speed;
+        playerDistance += Math.abs(player.y-oldPlayerY);
+
+        if(player.y<=0||player.y+player.size>=canvas.height){
+            heat=Math.min(100,heat+2.8);
+            if(heat>80&&Math.random()<.1) playTone(1200,"sine",.05,.05);
+            if(heat>=100) triggerGameOver();
+        }else heat=Math.max(0,heat-2.0);
+
+        player.y=Math.max(0,Math.min(canvas.height-player.size,player.y));
+        ghosting.unshift({x:player.x,y:player.y,z:zLayer});
+        if(ghosting.length>8) ghosting.pop();
+
+        // 音声時計が唯一のマスター。ノーツは音符の時刻ちょうどに画面右端から発射する。
+        if(songData && clock.active){
+            const t=getChartTime();
+            lastSongTime=t;
+            const audioEnd=songDuration+(songData.offset||0)+0.05;
+            while(nextEventIndex<gameEvents.length){
+                const ev=gameEvents[nextEventIndex];
+                if(songDuration>0 && ev.time>audioEnd){ nextEventIndex=gameEvents.length; break; }
+                if(ev.time>t) break;
+                nextEventIndex++;
+                spawnFromNote(ev);
+            }
+            // 曲が終わったら、残りのノーツが流れ切ってからリザルトへ
+            if(songFinished && !isGameOver){
+                const remain=obstacles.some(o=>o.clock);
+                if(!remain || performance.now()-songEndWall>5000) finishSong();
+            }
+        }
+    }
+
+    const tNow=clock.active?getChartTime():clock.last+syncCalibMs/1000;
+    for(let i=obstacles.length-1;i>=0;i--){
+        const obs=obstacles[i];
+        const prevX=(obs.cx!==undefined)?obs.cx:obs.x;
+        if(obs.clock) obs.x=obs.spawnX-(tNow-obs.hitTime)*obs.pxs;
+        else obs.x-=obs.speed;
+        obs.cx=obs.x;
+        obs.rot+=.04;
+
+        // 速いノーツでもすり抜けないよう、前回位置〜今回位置の範囲で当たり判定
+        const sweepL=Math.min(prevX,obs.x), sweepR=Math.max(prevX,obs.x)+obs.w;
+        if(isStarted&&!isGameOver&&obs.z===zLayer&&
+           player.x<sweepR&&player.x+player.size>sweepL&&
+           player.y<obs.y+obs.h&&player.y+player.size>obs.y){
+            triggerGameOver();
+        }
+
+        if(obs.x<-250){
+            if(isStarted&&!isGameOver&&obs.z===zLayer){
+                score++;
+                document.getElementById("score-display").innerText=score.toString().padStart(3,"0");
+            }
+            obstacles.splice(i,1);
+        }
+    }
+}
+
+function draw(){
+    ctx.fillStyle=isMelting?"#f11":`rgb(${currentBg.r},${currentBg.g},${currentBg.b})`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    if(isStarted){
+        const wallWidth=(canvas.width/2)*(Math.min(100,heat)/100);
+        ctx.fillStyle=isMelting?"#000":`rgba(255,0,0,${.35*(heat/100)})`;
+        ctx.fillRect(0,0,wallWidth,canvas.height);
+        ctx.fillRect(canvas.width-wallWidth,0,wallWidth,canvas.height);
+    }
+
+    if(isStarted&&!isMelting){
+        ghosting.forEach((g,i)=>{
+            ctx.globalAlpha=(1-i/8)*.2;
+            ctx.fillStyle=(isEyeCare||g.z===1)?"#fff":"#000";
+            ctx.fillRect(g.x,g.y,player.size,player.size);
+        });
+        ctx.globalAlpha=1;
+    }
+
+    obstacles.forEach(obs=>{
+        const same=obs.z===zLayer;
+        const color=obs.z===0?"#00d2ff":"#ff3366";
+        ctx.save();
+        ctx.translate(obs.x+obs.w/2,obs.y+obs.h/2);
+        ctx.rotate(obs.rot);
+        if(same){
+            ctx.shadowBlur=15;ctx.shadowColor=color;ctx.fillStyle=color;
+            ctx.fillRect(-obs.w/2,-obs.h/2,obs.w,obs.h);
+        }else{
+            ctx.globalAlpha=.15;ctx.fillStyle=color;
+            ctx.fillRect(-obs.w/2,-obs.h/2,obs.w,obs.h);
+            ctx.globalAlpha=.4;ctx.strokeStyle=color;ctx.lineWidth=2;
+            ctx.setLineDash([5,5]);ctx.strokeRect(-obs.w/2,-obs.h/2,obs.w,obs.h);
+        }
+        ctx.restore();
+    });
+
+    if(isStarted){
+        ctx.globalAlpha=1;
+        ctx.fillStyle=isMelting?"#fff":(isEyeCare||zLayer===1?"#fff":"#000");
+        ctx.fillRect(player.x,player.y,player.size,player.size);
+    }
+
+    if(isResultFading){
+        ctx.fillStyle=`rgba(0,0,0,${resultFadeAlpha})`;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+}
+
+function performDive(){
+    if(!isStarted||isGameOver)return;
+    zLayer=zLayer===0?1:0;
+    updateVisuals();
+    triggerGlitchEffect(300);
+    playTone(zLayer===0?400:600,"triangle",.3,.2);
+}
+
+let lastFrameWall=performance.now(), stepAccum=0;
+function syncClockObstaclesForRender(){
+    if(!clock.active||isMelting) return;
+    const t=getChartTime();
+    for(const o of obstacles) if(o.clock) o.x=o.spawnX-(t-o.hitTime)*o.pxs;
+}
+function loop(){
+    try {
+        // ゲームロジックは常に60Hz固定（高Hzモニタ・フレーム落ちでも速度が変わらない）
+        const nowW=performance.now();
+        stepAccum+=Math.min(100,nowW-lastFrameWall);
+        lastFrameWall=nowW;
+        let steps=0;
+        while(stepAccum>=FIXED_STEP && steps<6){ update(); stepAccum-=FIXED_STEP; steps++; }
+        if(steps>=6) stepAccum=0;
+        syncClockObstaclesForRender(); // 描画だけは毎フレーム最新の音声時計で位置合わせ
+        draw();
+        const ds=document.getElementById("distanceScore");
+        if(ds) ds.textContent=`DIST: ${Math.floor(playerDistance)}  DODGED: ${dodgedNotes}`;
+        updateDebugReadout();
+        if(isResultFading){
+            resultFadeAlpha=Math.min(1,resultFadeAlpha+0.018);
+            if(resultFadeAlpha>=1){
+                resultFadeAlpha=1;
+                document.getElementById("final-score").innerText=score.toString().padStart(3,"0");
+                document.getElementById("best-score").innerText=highScore.toString().padStart(3,"0");
+                document.getElementById("result").style.display="flex";
+                canReboot=true;
+            }
+        }
+    } catch(err) {
+        console.error("DIMENSION OVERLOAD render loop:", err);
+    }
+    requestAnimationFrame(loop);
+}
+
+document.getElementById("tut-trigger").addEventListener("pointerdown",e=>{
+    e.stopPropagation();
+    startTutorial();
+});
+
+document.getElementById("eye-care-toggle").addEventListener("pointerdown",e=>{
+    e.preventDefault();e.stopPropagation();
+    isEyeCare=!isEyeCare;
+    e.target.innerText=`EYE-CARE MODE: ${isEyeCare?"ON":"OFF"}`;
+    e.target.classList.toggle("active",isEyeCare);
+    initAudio();updateVisuals();
+});
+
+function startTutorial(){
+    // Tutorial remains available even without a song.
+    isTutorial=true;tutStep=0;isTutFailed=false;isStarted=true;reset();updateTutUI();
+}
+function updateTutUI(){
+    const data=tutSteps[tutStep];
+    document.getElementById("tut-phase").innerText=data.phase;
+    document.getElementById("tut-text").innerText=data.text;
+    document.getElementById("tut-hint").style.display="none";
+}
+
+const actionStart=e=>{
+    if(e.target.closest("#debug-panel")||e.target.id==="eye-care-toggle"||e.target.id==="zip-input"||e.target.closest(".zip-btn"))return;
+
+    if(isTutorial&&tutStep===2&&!isMelting){
+        if(tutTimer>180){
+            isTutorial=false;isStarted=false;
+            document.getElementById("tut-overlay").style.display="none";
+            document.getElementById("title-screen").style.display="flex";
+        }
+        return;
+    }
+
+    initAudio();
+
+    if(isMelting&&canReboot){
+        if(songData) startGame(); else startTutorial();
+        return;
+    }
+
+    if(!isStarted){
+        if(songData) startGame();
+        else startTutorial();
+        return;
+    }
+
+    if(!isGameOver){
+        if(e.pointerType==="mouse"&&e.button===2){
+            e.preventDefault();performDive();
+        }else isPressing=true;
+    }
+};
+
+window.addEventListener("pointerdown",actionStart);
+window.addEventListener("pointerup",()=>isPressing=false);
+window.addEventListener("touchstart",e=>{
+    if(e.target.closest("#debug-panel")||e.target.id==="eye-care-toggle")return;
+    if(isStarted&&!isGameOver&&e.touches.length>1){
+        e.preventDefault();performDive();
+    }
+},{passive:false});
+window.addEventListener("contextmenu",e=>e.preventDefault());
+
+window.addEventListener("keydown",e=>{
+    if(e.repeat) return;
+    if(isResultFading && !canReboot) return;
+
+    if(e.code==="Enter"&&isTutorial&&tutStep===2&&!isMelting&&tutTimer>180){
+        isTutorial=false;isStarted=false;
+        document.getElementById("tut-overlay").style.display="none";
+        document.getElementById("title-screen").style.display="flex";
+    }
+
+    if(e.code==="Space"){
+        e.preventDefault();
+        if(isMelting&&canReboot){
+            if(songData) startGame(); else startTutorial();
+        }else if(!isStarted){
+            if(songData) startGame(); else startTutorial();
+        }else if(!isGameOver)isPressing=true;
+    }
+    if(e.code==="KeyZ"&&!isGameOver)performDive();
+});
+window.addEventListener("keyup",e=>{if(e.code==="Space")isPressing=false;});
+
+function setupDebugPanel(){
+    const panel=document.getElementById("debug-panel");
+    panel.style.display=DEBUG_CONFIG.enabled?"block":"none";
+    if(!DEBUG_CONFIG.enabled) return;
+
+    const inv=document.getElementById("dbg-inv-btn");
+    const box=document.getElementById("dbg-box-btn");
+    const speed=document.getElementById("dbg-speed-range");
+    const spawn=document.getElementById("dbg-spawn-range");
+    const early=document.getElementById("dbg-early-range");
+
+    inv.textContent=DEBUG_CONFIG.invincible?"ON":"OFF";
+    inv.classList.toggle("active",DEBUG_CONFIG.invincible);
+    box.textContent=DEBUG_CONFIG.showHitbox?"ON":"OFF";
+    box.classList.toggle("active",DEBUG_CONFIG.showHitbox);
+    speed.value=DEBUG_CONFIG.customSpeed===null?0:DEBUG_CONFIG.customSpeed;
+    document.getElementById("dbg-speed-val").textContent=DEBUG_CONFIG.customSpeed===null?"AUTO":DEBUG_CONFIG.customSpeed;
+    spawn.value=Math.round(DEBUG_CONFIG.spawnRate*10);
+    document.getElementById("dbg-spawn-val").textContent=DEBUG_CONFIG.spawnRate.toFixed(1);
+    early.value=syncCalibMs;
+    document.getElementById("dbg-early-val").textContent=early.value;
+
+    inv.addEventListener("click",()=>{
+        DEBUG_CONFIG.invincible=!DEBUG_CONFIG.invincible;
+        inv.textContent=DEBUG_CONFIG.invincible?"ON":"OFF";
+        inv.classList.toggle("active",DEBUG_CONFIG.invincible);
+    });
+    box.addEventListener("click",()=>{
+        DEBUG_CONFIG.showHitbox=!DEBUG_CONFIG.showHitbox;
+        box.textContent=DEBUG_CONFIG.showHitbox?"ON":"OFF";
+        box.classList.toggle("active",DEBUG_CONFIG.showHitbox);
+    });
+    speed.addEventListener("input",()=>{
+        DEBUG_CONFIG.customSpeed=Number(speed.value)===0?null:Number(speed.value);
+        document.getElementById("dbg-speed-val").textContent=DEBUG_CONFIG.customSpeed===null?"AUTO":DEBUG_CONFIG.customSpeed;
+    });
+    spawn.addEventListener("input",()=>{
+        DEBUG_CONFIG.spawnRate=Number(spawn.value)/10;
+        document.getElementById("dbg-spawn-val").textContent=DEBUG_CONFIG.spawnRate.toFixed(1);
+    });
+    early.addEventListener("input",()=>{
+        setSyncCalib(Number(early.value));
+    });
+}
+
+function updateDebugReadout(){
+    if(!DEBUG_CONFIG.enabled) return;
+    const el=document.getElementById("dbg-timing-info");
+    if(!el) return;
+    const next=gameEvents[nextEventIndex];
+    el.textContent=
+        `COURSE: ${songData?.course||"-"}\n`+
+        `CHART: ${(clock.last).toFixed(3)} s (SYNC ${syncCalibMs}ms)\n`+
+        `AUDIO LEN: ${songDuration?songDuration.toFixed(3):"--"} s  OFFSET ${(songData?.offset||0)}\n`+
+        `TJA END: ${(songData?.duration||0).toFixed(3)} s\n`+
+        `NEXT: ${next?next.time.toFixed(3):"END"} s\n`+
+        `INDEX: ${nextEventIndex}/${gameEvents.length}\n`+
+        `OUT LATENCY: ${audioCtx?((audioCtx.outputLatency||audioCtx.baseLatency||0)*1000).toFixed(0):"--"} ms`;
+}
+
+// ---------- 同期の微調整 ( [ ] キー ) ----------
+function setSyncCalib(ms){
+    syncCalibMs=Math.max(-500,Math.min(500,Math.round(ms)));
+    try{localStorage.setItem("dimG_syncMs2",String(syncCalibMs));}catch{}
+    const dbgVal=document.getElementById("dbg-early-val"); if(dbgVal) dbgVal.textContent=syncCalibMs;
+    const dbgRange=document.getElementById("dbg-early-range"); if(dbgRange) dbgRange.value=syncCalibMs;
+    let toast=document.getElementById("sync-toast");
+    if(!toast){
+        toast=document.createElement("div");
+        toast.id="sync-toast";
+        toast.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:6px 14px;font:12px monospace;letter-spacing:2px;background:rgba(0,0,0,.75);color:#0f0;border:1px solid #0f0;z-index:2000;pointer-events:none;transition:opacity .3s";
+        document.body.appendChild(toast);
+    }
+    toast.textContent=`SYNC ${syncCalibMs>=0?"+":""}${syncCalibMs} ms  (+ = ノーツが早く出る / - = 遅く出る)`;
+    toast.style.opacity="1";
+    clearTimeout(setSyncCalib._t);
+    setSyncCalib._t=setTimeout(()=>{toast.style.opacity="0";},1500);
+}
+window.addEventListener("keydown",e=>{
+    if(e.code==="BracketLeft")  setSyncCalib(syncCalibMs-(e.shiftKey?1:5));
+    if(e.code==="BracketRight") setSyncCalib(syncCalibMs+(e.shiftKey?1:5));
+});
+
+setupDebugPanel();
+
+updateVisuals();
+loop();
+</script>
+</body>
+</html>
