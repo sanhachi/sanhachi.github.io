@@ -129,7 +129,7 @@
             <div id="tut-trigger" class="tut-btn">HOW TO PLAY</div>
             <div id="eye-care-toggle" class="eye-care-status">EYE-CARE MODE: OFF</div>
         </div>
-        <div id="version-info">VER. 2.0 ©2026 Sanhachi</div>
+        <div id="version-info">VER. 2.01 ©2026 Sanhachi</div>
     </div>
 
     <div id="result" class="overlay force-white">
@@ -159,8 +159,28 @@ const ctx = canvas.getContext('2d');
 let score = 0;
 let playerDistance = 0;
 let dodgedNotes = 0;
-let highScore = localStorage.getItem('dimG_highScore') || 0;
-document.getElementById('title-best').innerText = highScore.toString().padStart(3, '0');
+// ハイスコアは曲(タイトル+難易度+音声ファイル名)ごとに保存する
+let highScore = 0, bestKey = null, currentAudioName = "";
+function bestStore(){ try{ return JSON.parse(localStorage.getItem('dimG_highScores')||'{}')||{}; }catch{ return {}; } }
+function updateBestUI(){
+    const t=document.getElementById('title-best');
+    if(t) t.innerText = bestKey ? highScore.toString().padStart(3,'0') : '---';
+}
+function setBestKeyFromSong(){
+    bestKey = songData ? `${songData.title||''}|${songData.course||''}|${currentAudioName}` : null;
+    highScore = bestKey ? (Number(bestStore()[bestKey])||0) : 0;
+    updateBestUI();
+}
+function commitScore(){
+    if(!bestKey || isTutorial) return;
+    if(score>highScore){
+        highScore=score;
+        const st=bestStore(); st[bestKey]=score;
+        try{ localStorage.setItem('dimG_highScores',JSON.stringify(st)); }catch{}
+    }
+    updateBestUI();
+}
+updateBestUI();
 
 let isStarted = false, isGameOver = false, isMelting = false, isPressing = false;
 let heat = 0, zLayer = 0, ghosting = [], canReboot = false, isEyeCare = false, titleTimer = 0;
@@ -418,6 +438,8 @@ async function loadSongZip(file){
         songData=parsedSong;
         gameEvents=buildGameEvents(songData.notes, songData.bpm);
         songName=file.name.replace(/\.zip$/i,"");
+        currentAudioName=base(audioEntry.name);
+        setBestKeyFromSong();
 
         initAudio();
         const arrBuf=await audioEntry.async("arraybuffer");
@@ -442,7 +464,7 @@ async function loadSongZip(file){
             songAudio.load();
         }
 
-        info.textContent=`${songName} // ${songData.title} // ${songData.course} // BPM ${songData.bpm}`;
+        info.textContent=`${songData.title||songName} // ${currentAudioName} // ${songData.course} // BPM ${songData.bpm}`;
         progress.textContent=`NOTES: ${songData.notes.length} // ${songBuffer?"AUDIO-CLOCK SYNC (WebAudio)":"AUDIO-CLOCK SYNC (fallback)"} // SYNC ${syncCalibMs>=0?"+":""}${syncCalibMs}ms ( [ ] で調整 )`;
         document.getElementById("start-msg").textContent="CLICK OR SPACE TO START";
         isStarted=false;
@@ -464,6 +486,10 @@ function onSongEnded(){
     songFinished=true;
     songEndWall=performance.now();
     nextEventIndex=gameEvents.length;
+    // 曲が終わったら自機は操作不能・無敵になり背景へフェードアウトする。
+    // すでに自機を通過したノーツだけスコアに数える（自機が動けないため）。
+    isPressing=false;
+    for(const o of obstacles) o.noScore=(o.x+o.w>=player.x);
     // 画面に残っているノーツが流れ切ってから finishSong() する（update() 内で判定）
 }
 
@@ -526,7 +552,7 @@ function stopSong(){
 
 function noteSize(ev){ return ev.note>=5 ? 64 : (ev.note===3||ev.note===4 ? 50 : 36); }
 function currentSpeed(){
-    let s=isTutorial?8.5:(isStarted?Math.min(SPEED_CAP,8.5+score*0.15):5);
+    let s=isTutorial?11:(isStarted?Math.min(SPEED_CAP,8.5+score*0.15):5);
     if(DEBUG_CONFIG.customSpeed!==null) s=DEBUG_CONFIG.customSpeed;
     return s;
 }
@@ -605,8 +631,19 @@ function spawnFromNote(ev){
     spawn(y,size,z,ev);
 }
 
+let rebootArmed=false;
+// リザルト表示から1秒間はリトライ入力を受け付けない（連打中に即リトライしてしまうのを防ぐ）
+function armReboot(){
+    if(rebootArmed) return;
+    rebootArmed=true;
+    const msg=document.getElementById("reboot-msg");
+    if(msg) msg.style.visibility="hidden";
+    setTimeout(()=>{ canReboot=true; if(msg) msg.style.visibility="visible"; },1000);
+}
+
 function reset(){
     initAudio();
+    rebootArmed=false;
     score=0; playerDistance=0; dodgedNotes=0; heat=0; zLayer=0; player.y=canvas.height/2;
     obstacles=[]; ghosting=[]; isGameOver=false; isMelting=false; canReboot=false; isResultFading=false; resultFadeAlpha=0;
     tutTimer=0; nextEventIndex=0; lastSongTime=0; songFinished=false; songEndWall=0;
@@ -632,6 +669,7 @@ function startGame(){
 
 function finishSong(){
     if(isResultFading || document.getElementById("result").style.display==="flex") return;
+    commitScore();
     isStarted=false;
     songPlaying=false;
     isPressing=false;
@@ -644,6 +682,8 @@ function finishSong(){
 }
 
 function triggerGameOver(){
+    if(songFinished) return;
+    if(isTutorial){ if(!isTutFailed) tutFail(); return; }
     if(isGameOver || (DEBUG_CONFIG.enabled&&DEBUG_CONFIG.invincible)) return;
     isGameOver=true; isMelting=true; canReboot=false; isPressing=false;
     stopSong();
@@ -652,11 +692,7 @@ function triggerGameOver(){
     document.getElementById("result-label").innerText="DIMENSION_COLLAPSED";
     document.getElementById("reboot-msg").innerText="CLICK TO REPLAY";
     document.getElementById("best-container").style.visibility="visible";
-    if(score>highScore){
-        highScore=score;
-        localStorage.setItem("dimG_highScore",highScore);
-        document.getElementById("title-best").innerText=highScore.toString().padStart(3,"0");
-    }
+    commitScore();
     playTone(100,"sawtooth",0.5,0.3);
     playTone(50,"square",0.8,0.4);
     document.getElementById("status-label").innerText="SYSTEM_STATUS: FAILED";
@@ -690,7 +726,7 @@ function update(){
             document.getElementById("final-score").innerText=score.toString().padStart(3,"0");
             document.getElementById("best-score").innerText=highScore.toString().padStart(3,"0");
             document.getElementById("result").style.display="flex";
-            setTimeout(()=>canReboot=true,100);
+            armReboot();
         }
         return;
     }
@@ -707,22 +743,31 @@ function update(){
     currentBg.b=lerp(currentBg.b,targetRGB.b,.1);
 
     if(isStarted){
-        const oldPlayerY=player.y;
-        if(isPressing) player.y-=player.speed; else player.y+=player.speed;
-        playerDistance += Math.abs(player.y-oldPlayerY);
+        if(songFinished){
+            // OUTRO: 操作不能・無敵（移動も当たりも過熱もなし）
+            heat=Math.max(0,heat-3);
+            if(ghosting.length) ghosting.pop();
+        }else{
+            const oldPlayerY=player.y;
+            if(isPressing) player.y-=player.speed; else player.y+=player.speed;
+            playerDistance += Math.abs(player.y-oldPlayerY);
 
-        if(player.y<=0||player.y+player.size>=canvas.height){
-            heat=Math.min(100,heat+2.8);
-            if(heat>80&&Math.random()<.1) playTone(1200,"sine",.05,.05);
-            if(heat>=100) triggerGameOver();
-        }else heat=Math.max(0,heat-2.0);
+            if(player.y<=0||player.y+player.size>=canvas.height){
+                heat=Math.min(100,heat+2.8);
+                if(heat>80&&Math.random()<.1) playTone(1200,"sine",.05,.05);
+                if(heat>=100) triggerGameOver();
+            }else heat=Math.max(0,heat-2.0);
 
-        player.y=Math.max(0,Math.min(canvas.height-player.size,player.y));
-        ghosting.unshift({x:player.x,y:player.y,z:zLayer});
-        if(ghosting.length>8) ghosting.pop();
+            player.y=Math.max(0,Math.min(canvas.height-player.size,player.y));
+            ghosting.unshift({x:player.x,y:player.y,z:zLayer});
+            if(ghosting.length>8) ghosting.pop();
+
+        }
+
+        if(isTutorial) updateTutorial();
 
         // 音声時計が唯一のマスター。ノーツは音符の時刻ちょうどに画面右端から発射する。
-        if(songData && clock.active){
+        if(!isTutorial && songData && clock.active){
             const t=getChartTime();
             lastSongTime=t;
             const audioEnd=songDuration+(songData.offset||0)+0.05;
@@ -736,7 +781,8 @@ function update(){
             // 曲が終わったら、残りのノーツが流れ切ってからリザルトへ
             if(songFinished && !isGameOver){
                 const remain=obstacles.some(o=>o.clock);
-                if(!remain || performance.now()-songEndWall>5000) finishSong();
+                const since=performance.now()-songEndWall;
+                if(since>=1000 && (!remain || since>5000)) finishSong();
             }
         }
     }
@@ -744,6 +790,7 @@ function update(){
     const tNow=clock.active?getChartTime():clock.last+syncCalibMs/1000;
     for(let i=obstacles.length-1;i>=0;i--){
         const obs=obstacles[i];
+        if(!obs) continue; // チュートリアル失敗でループ中に配列が空になる場合
         const prevX=(obs.cx!==undefined)?obs.cx:obs.x;
         if(obs.clock) obs.x=obs.spawnX-(tNow-obs.hitTime)*obs.pxs;
         else obs.x-=obs.speed;
@@ -752,14 +799,19 @@ function update(){
 
         // 速いノーツでもすり抜けないよう、前回位置〜今回位置の範囲で当たり判定
         const sweepL=Math.min(prevX,obs.x), sweepR=Math.max(prevX,obs.x)+obs.w;
-        if(isStarted&&!isGameOver&&obs.z===zLayer&&
+        if(isStarted&&!isGameOver&&!songFinished&&obs.z===zLayer&&
            player.x<sweepR&&player.x+player.size>sweepL&&
            player.y<obs.y+obs.h&&player.y+player.size>obs.y){
             triggerGameOver();
         }
 
+        if(isTutorial && !obs.passed && obs.x+obs.w<player.x){
+            obs.passed=true;
+            if(!isTutFailed) tutPassed++;
+        }
+
         if(obs.x<-250){
-            if(isStarted&&!isGameOver&&obs.z===zLayer){
+            if(isStarted&&!isGameOver&&obs.z===zLayer&&!obs.noScore){
                 score++;
                 document.getElementById("score-display").innerText=score.toString().padStart(3,"0");
             }
@@ -767,6 +819,8 @@ function update(){
         }
     }
 }
+
+function outroAlpha(){ return songFinished ? Math.max(0,1-(performance.now()-songEndWall)/800) : 1; }
 
 function draw(){
     ctx.fillStyle=isMelting?"#f11":`rgb(${currentBg.r},${currentBg.g},${currentBg.b})`;
@@ -781,7 +835,7 @@ function draw(){
 
     if(isStarted&&!isMelting){
         ghosting.forEach((g,i)=>{
-            ctx.globalAlpha=(1-i/8)*.2;
+            ctx.globalAlpha=(1-i/8)*.2*outroAlpha();
             ctx.fillStyle=(isEyeCare||g.z===1)?"#fff":"#000";
             ctx.fillRect(g.x,g.y,player.size,player.size);
         });
@@ -807,9 +861,10 @@ function draw(){
     });
 
     if(isStarted){
-        ctx.globalAlpha=1;
+        ctx.globalAlpha=outroAlpha();
         ctx.fillStyle=isMelting?"#fff":(isEyeCare||zLayer===1?"#fff":"#000");
         ctx.fillRect(player.x,player.y,player.size,player.size);
+        ctx.globalAlpha=1;
     }
 
     if(isResultFading){
@@ -819,7 +874,7 @@ function draw(){
 }
 
 function performDive(){
-    if(!isStarted||isGameOver)return;
+    if(!isStarted||isGameOver||songFinished)return;
     zLayer=zLayer===0?1:0;
     updateVisuals();
     triggerGlitchEffect(300);
@@ -853,7 +908,7 @@ function loop(){
                 document.getElementById("final-score").innerText=score.toString().padStart(3,"0");
                 document.getElementById("best-score").innerText=highScore.toString().padStart(3,"0");
                 document.getElementById("result").style.display="flex";
-                canReboot=true;
+                armReboot();
             }
         }
     } catch(err) {
@@ -877,7 +932,56 @@ document.getElementById("eye-care-toggle").addEventListener("pointerdown",e=>{
 
 function startTutorial(){
     // Tutorial remains available even without a song.
-    isTutorial=true;tutStep=0;isTutFailed=false;isStarted=true;reset();updateTutUI();
+    stopSong(); clock.active=false;
+    isTutorial=true;tutStep=0;isTutFailed=false;tutPassed=0;isStarted=true;reset();updateTutUI();
+}
+let tutPassed=0;
+function exitTutorial(){
+    isTutorial=false;isStarted=false;isTutFailed=false;
+    obstacles=[];ghosting=[];heat=0;zLayer=0;isPressing=false;
+    document.getElementById("tut-overlay").style.display="none";
+    document.getElementById("ui").style.display="none";
+    document.getElementById("title-screen").style.display="flex";
+    updateVisuals();
+}
+function tutNextStep(){
+    tutStep++; tutTimer=0; tutPassed=0; obstacles=[]; heat=0;
+    updateTutUI();
+}
+function tutFail(){
+    isTutFailed=true; tutTimer=0; obstacles=[]; heat=0; isPressing=false;
+    document.getElementById("tut-text").innerText="FAILED... TRY AGAIN";
+    playTone(100,"sawtooth",0.3,0.2);
+}
+function updateTutorial(){
+    tutTimer++;
+    if(isTutFailed){
+        if(tutTimer>90){
+            isTutFailed=false; tutTimer=0; tutPassed=0; obstacles=[];
+            player.y=canvas.height/2; zLayer=0; updateVisuals();
+            updateTutUI();
+        }
+        return;
+    }
+    if(tutStep===0){
+        // PHASE_01: 押し続けて上昇、離して下降。障害物を4つ避ける
+        if(tutTimer%90===45) spawn(0.2+Math.random()*0.6,44,zLayer);
+        if(tutPassed>=4) tutNextStep();
+    }else if(tutStep===1){
+        // PHASE_02: 画面を塞ぐ壁。Z / 右クリックで次元を切り替えて3回すり抜ける
+        if(tutTimer%150===60){
+            const sz=canvas.height*0.18;   // 隙間なく画面を塞ぐ
+            for(const y of [0,0.16,0.32,0.48,0.64,0.80,0.96]) spawn(y,sz,zLayer);
+        }
+        if(tutPassed>=21) tutNextStep();
+    }else{
+        // PHASE_03: 画面端に触れると過熱(赤い壁)。3秒体験したら終了可能
+        if(tutTimer===181){
+            const h=document.getElementById("tut-hint");
+            h.innerText="CLICK OR ENTER TO FINISH (ESC)";
+            h.style.display="block";
+        }
+    }
 }
 function updateTutUI(){
     const data=tutSteps[tutStep];
@@ -889,12 +993,10 @@ function updateTutUI(){
 const actionStart=e=>{
     if(e.target.closest("#debug-panel")||e.target.id==="eye-care-toggle"||e.target.id==="zip-input"||e.target.closest(".zip-btn"))return;
 
-    if(isTutorial&&tutStep===2&&!isMelting){
-        if(tutTimer>180){
-            isTutorial=false;isStarted=false;
-            document.getElementById("tut-overlay").style.display="none";
-            document.getElementById("title-screen").style.display="flex";
-        }
+    if(isResultFading && !canReboot) return;
+
+    if(isTutorial&&tutStep===2){
+        if(tutTimer>180) exitTutorial();
         return;
     }
 
@@ -911,7 +1013,7 @@ const actionStart=e=>{
         return;
     }
 
-    if(!isGameOver){
+    if(!isGameOver&&!songFinished){
         if(e.pointerType==="mouse"&&e.button===2){
             e.preventDefault();performDive();
         }else isPressing=true;
@@ -922,7 +1024,7 @@ window.addEventListener("pointerdown",actionStart);
 window.addEventListener("pointerup",()=>isPressing=false);
 window.addEventListener("touchstart",e=>{
     if(e.target.closest("#debug-panel")||e.target.id==="eye-care-toggle")return;
-    if(isStarted&&!isGameOver&&e.touches.length>1){
+    if(isStarted&&!isGameOver&&!songFinished&&e.touches.length>1){
         e.preventDefault();performDive();
     }
 },{passive:false});
@@ -932,10 +1034,9 @@ window.addEventListener("keydown",e=>{
     if(e.repeat) return;
     if(isResultFading && !canReboot) return;
 
-    if(e.code==="Enter"&&isTutorial&&tutStep===2&&!isMelting&&tutTimer>180){
-        isTutorial=false;isStarted=false;
-        document.getElementById("tut-overlay").style.display="none";
-        document.getElementById("title-screen").style.display="flex";
+    if(isTutorial&&((e.code==="Enter"&&tutStep===2&&tutTimer>180)||e.code==="Escape")){
+        exitTutorial();
+        return;
     }
 
     if(e.code==="Space"){
@@ -944,9 +1045,9 @@ window.addEventListener("keydown",e=>{
             if(songData) startGame(); else startTutorial();
         }else if(!isStarted){
             if(songData) startGame(); else startTutorial();
-        }else if(!isGameOver)isPressing=true;
+        }else if(!isGameOver&&!songFinished)isPressing=true;
     }
-    if(e.code==="KeyZ"&&!isGameOver)performDive();
+    if(e.code==="KeyZ"&&!isGameOver&&!songFinished)performDive();
 });
 window.addEventListener("keyup",e=>{if(e.code==="Space")isPressing=false;});
 
